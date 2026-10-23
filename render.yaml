@@ -17,4 +17,12 @@ services:
       - key: SMS_MIN_SEVERITY
         value: high
       - key: ANALYSIS_SPEED
-        value: "2"
+        value: "0"
+      - key: SAMPLE_FPS
+        value: "4"
+      - key: YOLO_IMGSZ
+        value: "480"
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
