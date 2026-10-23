@@ -10,7 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2
 WORKDIR /app/backend
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+# Pre-download YOLO weights into the build image for instant cold-starts
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 COPY backend/ ./
 COPY --from=web /web/dist /app/frontend/dist
+
+ENV PORT=8000
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

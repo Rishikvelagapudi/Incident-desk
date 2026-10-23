@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: incident-desk
+    runtime: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    healthCheckPath: /api/state
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: USERS
+        value: admin:admin123,reviewer:review123
+      - key: SECRET_KEY
+        generateValue: true
+      - key: EMAIL_MIN_SEVERITY
+        value: high
+      - key: SMS_MIN_SEVERITY
+        value: high
+      - key: ANALYSIS_SPEED
+        value: "2"
