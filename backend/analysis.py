@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 
 from config import (CONGESTION_MIN, EVENT_COOLDOWN_SEC, EVIDENCE_POST_SEC, EVIDENCE_PRE_SEC,
-                    SAMPLE_FPS, SEGMENT_SEC, YOLO_CONF, YOLO_MODEL)
+                    SAMPLE_FPS, SEGMENT_SEC, YOLO_CONF, YOLO_IMGSZ, YOLO_MODEL)
 
 log = logging.getLogger("analysis")
 
@@ -64,6 +64,9 @@ class Detector:
                 try:
                     from ultralytics import YOLO
 
+                    import os
+                    import torch
+                    torch.set_num_threads(min(8, max(4, os.cpu_count() or 4)))
                     cls._model = YOLO(YOLO_MODEL)
                 except Exception as exc:  # noqa: BLE001
                     log.warning("YOLO unavailable (%s); using motion-only analysis", exc)
@@ -75,7 +78,7 @@ class Detector:
         if m is None:
             return None
         with cls._lock:
-            res = m.predict(frame, conf=YOLO_CONF, verbose=False, imgsz=640)[0]
+            res = m.predict(frame, conf=YOLO_CONF, verbose=False, imgsz=YOLO_IMGSZ)[0]
         out = []
         for b in res.boxes:
             c = int(b.cls[0])
@@ -498,12 +501,18 @@ class VideoAnalyzer:
             best = min(cands, key=lambda b: abs(b["t"] - (t - k)))
             if all(best is not c for c in chosen):
                 chosen.append(best)
-        return chosen
+        res = []
+        for b in chosen:
+            jpeg = b.get("jpeg")
+            if not jpeg and "frame" in b:
+                jpeg = self._annotated_frame(b["frame"], "pre", b["t"], b["summary"])
+            res.append(dict(t=b["t"], jpeg=jpeg, summary=b["summary"]))
+        return res
 
     def _process(self, frame, t):
         h, w = frame.shape[:2]
-        if w > 960:
-            frame = cv2.resize(frame, (960, int(h * 960 / w)))
+        if w > 640:
+            frame = cv2.resize(frame, (640, int(h * 640 / w)))
         events = []
         dets = Detector.detect(frame) if self.use_yolo else None
         if dets is not None:
@@ -514,7 +523,8 @@ class VideoAnalyzer:
         m = self.motion.update(frame, t)
         if m:
             events.append(m)
-        rec = dict(t=t, jpeg=self._annotated_frame(frame, "pre", t, summary), summary=summary)
+        # Fast lazy buffering: store frame and only draw/encode JPEG if selected as incident evidence
+        rec = dict(t=t, frame=frame.copy(), summary=summary)
 
         for p in list(self.pending):  # post-event evidence, one frame per second
             if t - p["last_t"] >= 1.0 and len(p["post"]) < EVIDENCE_POST_SEC:

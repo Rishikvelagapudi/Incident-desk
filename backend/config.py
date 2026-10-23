@@ -17,8 +17,9 @@ for _p in (UPLOAD_DIR, EVIDENCE_DIR, OUTBOX_DIR, SMS_OUTBOX_DIR):
 
 STORE_VIDEOS = os.getenv("STORE_VIDEOS", "false").lower() == "true"  # false = zero video retention, purge videos to save disk space
 SEGMENT_SEC = float(os.getenv("SEGMENT_SEC", "2"))          # video seconds per analysis segment
-SAMPLE_FPS = float(os.getenv("SAMPLE_FPS", "5"))            # frames analysed per video second
-ANALYSIS_SPEED = float(os.getenv("ANALYSIS_SPEED", "2"))    # 1 = real time, 2 = twice real time
+SAMPLE_FPS = float(os.getenv("SAMPLE_FPS", "4"))            # 4 FPS optimal kinematic sampling
+ANALYSIS_SPEED = float(os.getenv("ANALYSIS_SPEED", "0"))    # 0 = Turbo (instant compute)
+YOLO_IMGSZ = int(os.getenv("YOLO_IMGSZ", "480"))            # 480p: ~2x faster CPU inference
 EVENT_COOLDOWN_SEC = float(os.getenv("EVENT_COOLDOWN_SEC", "10"))
 MAX_CAMERAS = int(os.getenv("MAX_CAMERAS", "81"))
 _local_yolo = BASE / "yolov8n.pt" if (BASE / "yolov8n.pt").is_file() else Path("yolov8n.pt")
