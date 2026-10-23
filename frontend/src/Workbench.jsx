@@ -23,7 +23,29 @@ export default function Workbench({ id, user, navigate }) {
   const [busy, setBusy] = useState(false);
   const [integrity, setIntegrity] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailFeedback, setEmailFeedback] = useState("");
   const video = useRef(null);
+
+  const handleSendEmail = async () => {
+    if (!inc?.id) return;
+    setSendingEmail(true);
+    setEmailFeedback("");
+    try {
+      const res = await api(`/api/incidents/${inc.id}/email`, { method: "POST" });
+      if (res.status === "sent") {
+        setEmailFeedback(`✓ Email delivered successfully to ${res.to}`);
+      } else if (res.status === "logged") {
+        setEmailFeedback(`📁 Saved to outbox (${res.detail})`);
+      } else {
+        setEmailFeedback(`⚠️ Failed: ${res.detail || "Could not deliver email"}`);
+      }
+    } catch (err) {
+      setEmailFeedback(`⚠️ Error: ${err.message}`);
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   const guard = (e) => setError(e.message);
   useEffect(() => { 
@@ -216,6 +238,32 @@ export default function Workbench({ id, user, navigate }) {
             </a>
           </dd>
           <dt>Original video</dt><dd>{inc.video_ref?.file} · SHA-256 {inc.video_ref?.sha256?.slice(0, 16)}…</dd>
+          <dt>Email Alert Status</dt>
+          <dd>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <span className={`badge ${inc.email?.status === "sent" ? "sev-low" : inc.email?.status === "failed" ? "sev-critical" : "sev-medium"}`} style={{ fontSize: "12px", padding: "3px 8px" }}>
+                {inc.email?.status === "sent" && `✓ Sent to ${inc.email.to}`}
+                {inc.email?.status === "failed" && `⚠️ Email Failed (${inc.email.detail || "Connection error"})`}
+                {inc.email?.status === "logged" && `📁 Saved to Outbox (${inc.email.to || "offline"})`}
+                {inc.email?.status === "skipped" && `Skipped (${inc.email.detail})`}
+                {(!inc.email || inc.email?.status === "pending") && `⏳ Pending Dispatch`}
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={handleSendEmail}
+                disabled={sendingEmail}
+                style={{ fontSize: "12px", padding: "3px 10px" }}
+              >
+                {sendingEmail ? "Dispatching..." : "✉️ Dispatch Email Alert"}
+              </button>
+            </div>
+            {emailFeedback && (
+              <span style={{ display: "block", fontSize: "12px", color: emailFeedback.startsWith("✓") ? "#16a34a" : "#dc2626", marginTop: "4px" }}>
+                {emailFeedback}
+              </span>
+            )}
+          </dd>
           <dt>SMS Dispatch Status</dt>
           <dd>
             {inc.sms ? (

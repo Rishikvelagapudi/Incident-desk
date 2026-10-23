@@ -172,33 +172,45 @@ def build(inc: dict, to_email: str | None = None) -> EmailMessage:
 
 
 def send(inc: dict, to_email: str | None = None) -> dict:
-    dest = (to_email or ALERT_EMAIL_TO).strip()
+    import config
+    dest = (to_email or config.ALERT_EMAIL_TO or ALERT_EMAIL_TO).strip()
     msg = build(inc, dest)
     at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    if not SMTP_HOST:
+    active_host = SMTP_HOST if not SMTP_HOST else (config.SMTP_HOST or SMTP_HOST)
+    if not active_host:
         safe_to = dest.replace("@", "_at_").replace(".", "_")
         (OUTBOX_DIR / f"{inc['id']}_{safe_to}.eml").write_bytes(bytes(msg))
         return dict(status="logged", to=dest, at=at, detail="SMTP not configured; saved to data/outbox")
+
+    user = config.SMTP_USER or SMTP_USER
+    password = config.SMTP_PASSWORD or SMTP_PASSWORD
+    primary_port = config.SMTP_PORT or SMTP_PORT or 587
+
+    ports_to_try = [primary_port]
+    if 465 not in ports_to_try:
+        ports_to_try.append(465)
+
     last_err = ""
-    for attempt in range(2):
+    for port in ports_to_try:
         try:
-            host = SMTP_HOST
-            try:
-                host = socket.gethostbyname(SMTP_HOST)
-            except Exception:
-                pass
-            with smtplib.SMTP(host, SMTP_PORT, timeout=40) as s:
-                s.ehlo("localhost")
-                s.starttls()
-                s.ehlo("localhost")
-                if SMTP_USER:
-                    s.login(SMTP_USER, SMTP_PASSWORD)
-                s.send_message(msg)
-            return dict(status="sent", to=dest, at=at, detail="")
+            if port == 465:
+                with smtplib.SMTP_SSL(active_host, 465, timeout=20) as s:
+                    if user:
+                        s.login(user, password)
+                    s.send_message(msg)
+                return dict(status="sent", to=dest, at=at, detail="Delivered via SSL port 465")
+            else:
+                with smtplib.SMTP(active_host, port, timeout=20) as s:
+                    s.ehlo("localhost")
+                    s.starttls()
+                    s.ehlo("localhost")
+                    if user:
+                        s.login(user, password)
+                    s.send_message(msg)
+                return dict(status="sent", to=dest, at=at, detail=f"Delivered via STARTTLS port {port}")
         except Exception as exc:  # noqa: BLE001
             last_err = str(exc)
-            if attempt == 0:
-                time.sleep(1.5)
+            continue
     return dict(status="failed", to=dest, at=at, detail=last_err)
 
 

@@ -4,9 +4,9 @@ import secrets
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE = Path(__file__).parent
+load_dotenv(BASE / ".env")
+load_dotenv()
 DATA_DIR = Path(os.getenv("DATA_DIR", BASE / "data"))
 UPLOAD_DIR = DATA_DIR / "uploads"
 EVIDENCE_DIR = DATA_DIR / "evidence"

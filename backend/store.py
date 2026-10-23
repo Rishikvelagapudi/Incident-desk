@@ -29,6 +29,14 @@ class Store:
                         for p in UPLOAD_DIR.iterdir():
                             if p.name.endswith(fname) or fname in p.name:
                                 self.paths[cam_id] = str(p)
+                                rec_summary = None
+                                for ev_fr in reversed(item.get("evidence", [])):
+                                    if ev_fr.get("summary"):
+                                        rec_summary = ev_fr["summary"]
+                                        break
+                                if not rec_summary:
+                                    rec_summary = dict(vehicles=0, persons=0, conf=item.get("confidence", 0.92), objects=[], tracks_count=0)
+
                                 self.cameras[cam_id] = dict(
                                     id=cam_id,
                                     name=item.get("camera_name", cam_id),
@@ -41,6 +49,7 @@ class Store:
                                     severity="normal",
                                     incident_count=1,
                                     error=None,
+                                    summary=rec_summary,
                                 )
                                 break
             except Exception as exc:  # noqa: BLE001

@@ -288,18 +288,32 @@ class ReportingAgent:
         else:
             tracked_summary = "Motion-difference optical analysis (no class detector active)"
 
-        obj_desc_list = []
-        for o in objs[:5]:
-            loc = o.get("loc", "center").replace("-", " ")
-            spd = o.get("speed_label", "normal")
-            extra = f" [{o['posture']}]" if "posture" in o else ""
-            obj_desc_list.append(f"{o.get('name', 'Entity')} #{o.get('id', '?')} in {loc} ({spd}{extra})")
-        detailed_entities = "; ".join(obj_desc_list) if obj_desc_list else tracked_summary
-
         inc_type = inc.get("type", "general")
         cam_name = inc.get("camera_name", inc.get("camera_id", "Camera"))
         ts_text = fmt_ts(t)
         meta = inc.get("meta") or (ev.get("meta") if ev else {}) or {}
+
+        # Prioritize incident-involved target entities at the top of the tracked entity breakdown
+        target_ids = set()
+        if inc_type == "collision":
+            if "a_id" in meta: target_ids.add(meta["a_id"])
+            if "b_id" in meta: target_ids.add(meta["b_id"])
+        elif inc_type in ("fall", "restricted_zone"):
+            if "person_id" in meta: target_ids.add(meta["person_id"])
+
+        primary_objs = [o for o in objs if o.get("id") in target_ids]
+        secondary_objs = [o for o in objs if o.get("id") not in target_ids]
+        sorted_objs = primary_objs + secondary_objs
+
+        obj_desc_list = []
+        for o in sorted_objs[:6]:
+            oid = o.get("id", "?")
+            loc = o.get("loc", "center").replace("-", " ")
+            spd = o.get("speed_label", "normal")
+            extra = f" [{o['posture']}]" if "posture" in o else ""
+            prefix = "⭐ Target: " if oid in target_ids else ""
+            obj_desc_list.append(f"{prefix}{o.get('name', 'Entity')} #{oid} in {loc} ({spd}{extra})")
+        detailed_entities = "; ".join(obj_desc_list) if obj_desc_list else tracked_summary
 
         if inc_type == "collision":
             a_cls = meta.get("a_cls", "vehicle")
@@ -315,7 +329,7 @@ class ReportingAgent:
                 operator_note = "Inspect baseline lane positions, vehicle speeds, and check whether brake lights or evasive steering were initiated prior to impact"
                 finding = (
                     f"Surveillance baseline at video time {ts_text} ({dt_text}). The camera monitors active corridor traffic on {cam_name}. "
-                    f"Scene inventory: {tracked_summary}. Primary targets ({detailed_entities}) are tracked along normal roadway travel vectors. "
+                    f"Scene inventory: {tracked_summary}. Primary targets ({a_cls} #{a_id} and {b_cls} #{b_id}) are tracked advancing along normal roadway travel vectors. "
                     "Trajectories indicate sustained forward momentum with no premature stoppage or loss of lane control visible at this interval. "
                     "This frame serves as the baseline record for right-of-way, approach speed, and environmental visibility."
                 )
@@ -354,8 +368,8 @@ class ReportingAgent:
                 operator_note = "Observe walkway conditions, slip/trip hazards (water, obstacles, stairs), and subject gait stability prior to fall"
                 finding = (
                     f"Pedestrian baseline at video time {ts_text} ({dt_text}). The camera monitors pedestrian movement at {cam_name}. "
-                    f"Scene inventory: {tracked_summary}. The subject ({detailed_entities}) is tracked in an upright standing posture with stable vertical geometry. "
-                    "Movement is steady with no visual signs of staggering, stumbling, or environmental obstruction prior to this timestamp."
+                    f"Scene inventory: {tracked_summary}. The primary subject (Person #{p_id}) is tracked in an upright standing posture with stable vertical geometry. "
+                    "Movement is steady with no visual signs of stumbling or environmental obstruction prior to this timestamp."
                 )
             elif phase == "event":
                 title = f"Acute Loss of Balance & Ground Impact Point ({dt_text})"
@@ -375,8 +389,8 @@ class ReportingAgent:
                 dynamics = "Subject maintains horizontal posture on ground plane; zero vertical recovery or self-righting detected over consecutive frames"
                 operator_note = "Check subject consciousness, visible distress, movement of limbs, and observe whether bystanders or first aiders are attending"
                 finding = (
-                    f"Post-fall status frame at video time {ts_text} ({dt_text}). The subject remains in a horizontal prone/supine position on the walkway at {cam_name}. "
-                    f"Scene inventory: {tracked_summary} ({detailed_entities}). Over consecutive sampled intervals, no attempt to stand up or recover an upright vertical posture is detected. "
+                    f"Post-fall status frame at video time {ts_text} ({dt_text}). The fallen subject (Person #{p_id}) remains recumbent on the walking surface at {cam_name}. "
+                    f"Surrounding scene inventory: {tracked_summary}. Over consecutive sampled intervals, no attempt to stand up or recover an upright vertical posture is detected from the subject. "
                     "Prolonged immobility on the ground plane elevates medical concern. Operator should evaluate live stream and dispatch on-site security or medical first responders."
                 )
 
@@ -392,7 +406,7 @@ class ReportingAgent:
                 operator_note = "Observe subject direction of motion, safety gear (PPE), and check whether authorized escort or credentials are visible"
                 finding = (
                     f"Perimeter surveillance at video time {ts_text} ({dt_text}). Camera monitors access perimeter at {cam_name}. "
-                    f"Scene inventory: {tracked_summary}. The subject ({detailed_entities}) is located outside the configured restricted area, advancing toward the restricted boundary."
+                    f"Scene inventory: {tracked_summary}. The subject (Person #{p_id}) is located outside the configured restricted area, advancing toward the restricted boundary."
                 )
             elif phase == "event":
                 title = f"Unauthorized Perimeter Boundary Breach ({dt_text})"
@@ -506,6 +520,7 @@ class ReportingAgent:
                 url=f"/api/evidence/{inc['id']}/{name}", finding=exp["finding"],
                 scene_context=exp["scene_context"], tracked_entities=exp["tracked_entities"],
                 dynamics=exp["dynamics"], operator_note=exp["operator_note"],
+                summary=f.get("summary"),
                 confidence=conf, video_ref=dict(file=inc["video_ref"]["file"], at=round(f["t"], 1)),
                 sha256=sha256_bytes(f["jpeg"]),
             ))

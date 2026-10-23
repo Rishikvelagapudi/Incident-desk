@@ -68,6 +68,21 @@ export default function Settings({ user, navigate, path }) {
 
   // Station Preferences
   const [fxMode, setFxMode] = useState(() => localStorage.getItem("idesk_fx") !== "false");
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState(null);
+
+  const handleTestEmail = async () => {
+    setTestingEmail(true);
+    setTestEmailResult(null);
+    try {
+      const res = await api("/api/email/test", { method: "POST" });
+      setTestEmailResult(res);
+    } catch (e) {
+      setTestEmailResult({ status: "failed", detail: e.message });
+    } finally {
+      setTestingEmail(false);
+    }
+  };
 
   const guard = (e) => setError(e.message || String(e));
 
@@ -979,9 +994,27 @@ export default function Settings({ user, navigate, path }) {
 
                 <dt>Email (Gmail SMTP) Gateway</dt>
                 <dd>
-                  <span className="status-pill pill-sent">
-                    ✅ Active: rishikvelagapudi@gmail.com
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "6px" }}>
+                    <span className="status-pill pill-sent">
+                      ✅ Configured: rishikvelagapudi@gmail.com
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={handleTestEmail}
+                      disabled={testingEmail}
+                      style={{ fontSize: "12px", padding: "4px 12px" }}
+                    >
+                      {testingEmail ? "Sending Test..." : "✉️ Send Test Email"}
+                    </button>
+                  </div>
+                  {testEmailResult && (
+                    <div style={{ fontSize: "12.5px", marginTop: "6px", color: testEmailResult.status === "sent" ? "#16a34a" : testEmailResult.status === "logged" ? "#d97706" : "#dc2626" }}>
+                      {testEmailResult.status === "sent" && `✓ Test email sent successfully to ${testEmailResult.to}! Check your inbox.`}
+                      {testEmailResult.status === "logged" && `📁 SMTP not active; email saved to backend outbox.`}
+                      {testEmailResult.status === "failed" && `⚠️ Test failed: ${testEmailResult.detail}`}
+                    </div>
+                  )}
                   <p className="muted note" style={{ margin: "4px 0 0" }}>
                     Free instant email alerts with direct workbench link and forensic report.
                   </p>
