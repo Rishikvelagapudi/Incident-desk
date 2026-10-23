@@ -42,6 +42,7 @@ class Orchestrator:
         self.priority = PriorityAlertAgent()
         self.investigate = InvestigationAgent()
         self.reporting = ReportingAgent()
+        self._analysis_sem = asyncio.Semaphore(1)
 
     def snapshot(self) -> dict:
         return dict(type="snapshot", cameras=list(self.store.cameras.values()), incidents=list(self.store.incidents.values()))
@@ -63,9 +64,12 @@ class Orchestrator:
         zone = zones.get(cam_id) or zones.get(Path(self.store.paths[cam_id]).stem.split("_", 1)[-1])
         started = time.monotonic()
         try:
-            cam["status"] = "analyzing"
+            cam["status"] = "queued"
             await self.hub.broadcast(dict(type="camera_update", camera=cam))
-            gen = self.video.open(self.store.paths[cam_id], zone).segments()
+            async with self._analysis_sem:
+                cam["status"] = "analyzing"
+                await self.hub.broadcast(dict(type="camera_update", camera=cam))
+                gen = self.video.open(self.store.paths[cam_id], zone).segments()
             while True:
                 t0 = time.monotonic()
                 seg = await asyncio.to_thread(next, gen, None)  # heavy work off the event loop
@@ -89,6 +93,9 @@ class Orchestrator:
         except Exception as exc:  # noqa: BLE001
             log.exception("Camera %s failed", cam_id)
             cam["status"], cam["error"] = "error", str(exc)
+        finally:
+            import gc
+            gc.collect()
         await self.hub.broadcast(dict(type="camera_update", camera=cam))
 
     def _write(self, inc_id: str, files):

@@ -66,7 +66,8 @@ class Detector:
 
                     import os
                     import torch
-                    torch.set_num_threads(min(8, max(4, os.cpu_count() or 4)))
+                    threads = int(os.getenv("TORCH_THREADS", "1" if os.getenv("RENDER") else "2"))
+                    torch.set_num_threads(threads)
                     cls._model = YOLO(YOLO_MODEL)
                 except Exception as exc:  # noqa: BLE001
                     log.warning("YOLO unavailable (%s); using motion-only analysis", exc)
@@ -78,7 +79,12 @@ class Detector:
         if m is None:
             return None
         with cls._lock:
-            res = m.predict(frame, conf=YOLO_CONF, verbose=False, imgsz=YOLO_IMGSZ)[0]
+            try:
+                import torch
+                with torch.inference_mode():
+                    res = m.predict(frame, conf=YOLO_CONF, verbose=False, imgsz=YOLO_IMGSZ)[0]
+            except Exception:
+                res = m.predict(frame, conf=YOLO_CONF, verbose=False, imgsz=YOLO_IMGSZ)[0]
         out = []
         for b in res.boxes:
             c = int(b.cls[0])
@@ -589,3 +595,8 @@ class VideoAnalyzer:
                        summary=dict(self.engine.summary) if hasattr(self.engine, 'summary') else {})
         finally:
             cap.release()
+            self.buffer.clear()
+            self.pending.clear()
+            self.completed.clear()
+            import gc
+            gc.collect()
