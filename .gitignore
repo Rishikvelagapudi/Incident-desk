@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+ENV/
+
+# Environment variables & secrets
+.env
+*.env
+!.env.example
+
+# Runtime & Evidence Data
+data/
+backend/data/
+
+# Model Weights
+*.pt
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
